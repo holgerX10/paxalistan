@@ -400,8 +400,8 @@ canvas.conf{position:absolute;inset:0;z-index:70;pointer-events:none}
 
 <script>
 /* ===================== inställningar ===================== */
-const SUPA='https://pifgrntfctetcuggwnob.supabase.co';
-const KEY='sb_publishable_wZUa1kdwqq8LybONnuTv3w_wpXZC8S4';
+const SUPA='https://abkjjgegtryxwtuyuife.supabase.co';
+const KEY='sb_publishable_rIG3-FqfPFYaqXl57yEB1A_qtKWGJYp';
 const $=id=>document.getElementById(id);
 const app=$('app');
 const RM=matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -442,7 +442,7 @@ function listItems(){const own=S.items.filter(i=>!hidden.has(i.id));return own.l
 const nameOf=(id,n)=>id===me.id?'Du':(n||'Någon');
 
 /* ===================== api ===================== */
-async function rpc(fn,args){const r=await fetch(SUPA+'/rest/v1/rpc/'+fn,{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(args||{})});
+async function rpc(fn,args){const r=await fetch(SUPA+'/rest/v1/rpc/paxa_'+fn,{method:'POST',headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json',Prefer:'return=representation'},body:JSON.stringify(args||{})});
  if(!r.ok){let m='';try{m=(await r.json()).message||''}catch(e){}const e=new Error(m||('HTTP '+r.status));e.code=m;throw e}
  const t=await r.text();return t?JSON.parse(t):null}
 const ERR={not_allowed:'Du får inte göra det här.',not_found:'Hittades inte.',list_full:'Listan är full.',name_required:'Skriv ett namn.',thumb_too_big:'Bilden blev för stor.',taken:'Någon hann före.'};
@@ -453,7 +453,7 @@ async function load(silent){if(!token)return;try{const d=await rpc('get_list',{p
  catch(e){if(!silent)toast('Kunde inte nå servern');S.loaded=true;S.err=S.list?null:'net';render()}}
 function startSync(){stopSync();if(!token||!S.list)return;
  pollT=setInterval(()=>{if(document.visibilityState==='visible')load(true)},8000);
- if(sb){try{chan=sb.channel('list-'+S.list.id);chan.on('broadcast',{event:'change'},()=>load(true)).subscribe()}catch(e){chan=null}}}
+ if(sb){try{chan=sb.channel('paxa-'+S.list.id);chan.on('broadcast',{event:'change'},()=>load(true)).subscribe()}catch(e){chan=null}}}
 function stopSync(){clearInterval(pollT);pollT=null;if(chan){try{sb.removeChannel(chan)}catch(e){}chan=null}}
 function ping(){if(chan){try{chan.send({type:'broadcast',event:'change',payload:{}})}catch(e){}}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&token)load(true)});
