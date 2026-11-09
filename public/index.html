@@ -76,7 +76,7 @@ a{color:inherit}
 .switch{display:flex;align-items:center;gap:6px;min-height:44px;max-width:52%;padding:0 10px 0 14px;border-radius:999px;background:var(--card);box-shadow:var(--sh);font:600 13px 'Archivo'}
 .switch span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .switch svg{width:16px;height:16px;flex:none;color:var(--ink2)}
-.switch.empty{background:var(--act);color:var(--on-act)}
+.switch.nolist{background:var(--act);color:var(--on-act)}
 
 .vw{position:absolute;inset:0 0 calc(var(--nav) + var(--sab)) 0;overflow-y:auto;overflow-x:hidden;scrollbar-width:none;padding-top:calc(var(--hdr) + var(--sat));opacity:0;pointer-events:none;transform:translateX(var(--dx,0)) scale(.98);transition:opacity .25s,transform var(--t-soft) var(--soft)}
 .vw::-webkit-scrollbar{display:none}
@@ -171,6 +171,7 @@ a{color:inherit}
 .nav a.on{color:var(--ink)}
 .nav a.on svg{transform:translateY(-1px) scale(1.12)}
 .nav a:active svg{transform:scale(.85)}
+.nav .badge[hidden]{display:none!important}
 .nav .badge{position:absolute;top:6px;right:calc(50% - 22px);min-width:18px;height:18px;border-radius:9px;background:var(--act);color:var(--on-act);font-size:10px;display:flex;align-items:center;justify-content:center;animation:pop .6s var(--spring)}
 @keyframes pop{from{transform:scale(0)}}
 @keyframes popin{from{transform:scale(0);opacity:0}to{transform:none;opacity:1}}
@@ -374,7 +375,7 @@ canvas.conf{position:absolute;inset:0;z-index:70;pointer-events:none}
   <a data-v="lista" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="3" y="3" width="7" height="9" rx="2"/><rect x="14" y="3" width="7" height="5" rx="2"/><rect x="14" y="12" width="7" height="9" rx="2"/><rect x="3" y="16" width="7" height="5" rx="2"/></svg>Listan</a>
   <a data-v="kort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="6" y="4" width="13" height="17" rx="2.5" transform="rotate(8 12 12)"/><path d="M4.5 7.5l1 13" stroke-linecap="round"/></svg>Bläddra</a>
   <button class="fab press" id="fab" aria-label="Lägg till"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Lägg till</button>
-  <a data-v="akt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4z"/><path d="M10 21h4" stroke-linecap="round"/></svg>Aktivitet<span class="badge" id="badge" hidden>1</span></a>
+  <a data-v="akt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M6 17V11a6 6 0 0112 0v6l2 2H4z"/><path d="M10 21h4" stroke-linecap="round"/></svg>Aktivitet<span class="badge" id="badge" hidden></span></a>
   <a data-v="mer"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h10"/></svg>Mer</a>
  </nav>
 
@@ -472,7 +473,7 @@ let rafR=null;
 function render(){if(rafR)return;rafR=requestAnimationFrame(()=>{rafR=null;draw()})}
 function draw(){
  const L=S.list;document.body.classList.toggle('kid',kid||S.role==='recipient');
- $('switch').hidden=!L&&!mine().length;$('switch').classList.toggle('empty',!L);$('switchTx').textContent=L?L.name:'Välj lista';
+ $('switch').hidden=!L&&!mine().length;$('switch').classList.toggle('nolist',!L);$('switchTx').textContent=L?L.name:'Välj lista';
  renderLista();renderMer();if(cur==='kort')deck();if(cur==='akt')renderFeed();
 }
 function daysLeft(d){if(!d)return null;const t=new Date(d+'T00:00:00');const n=new Date();n.setHours(0,0,0,0);return Math.round((t-n)/86400e3)}
@@ -644,11 +645,12 @@ async function resize(blob,max,q,box){const im=await loadImg(blob);let sx=0,sy=0
  const k=Math.min(1,max/Math.max(sw,sh));const c=document.createElement('canvas');c.width=Math.round(sw*k);c.height=Math.round(sh*k);c.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);
  return new Promise(r=>c.toBlob(b=>r(b),'image/jpeg',q))}
 const toDataUrl=b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)});
+function seeFail(d,st){const m={no_key:'Bildigenkänningen saknar nyckel.',timeout:'Igenkänningen tog för lång tid.',net:'Ingen kontakt med igenkänningen.'}[d&&d.error]||('Igenkänningen svarade inte'+(d&&d.detail?': '+String(d.detail).slice(0,80):st?' ('+st+')':'')+'.');console.warn('see',st,d);setTimeout(()=>toast(m),700)}
 async function recognize(){if(camBusy||!camBlob)return;camBusy=true;buzz(20);$('vf').classList.add('lock');$('shutter').style.display='none';$('say').textContent='Känner igen…';
  let g=null;
  try{const small=await resize(camBlob,900,.8);const b64=(await toDataUrl(small)).split(',')[1];
   const r=await fetch('/api/see',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64,media_type:'image/jpeg'}),signal:AbortSignal.timeout(25000)});
-  if(r.ok){g=await r.json();if(g&&g.error)g=null}}catch(e){g=null}
+  const d=await r.json().catch(()=>({}));if(r.ok&&!d.error)g=d;else seeFail(d,r.status)}catch(e){seeFail({error:e.name==='TimeoutError'?'timeout':'net'},0)}
  if(g&&g.name){$('hit').classList.add('on');$('say').textContent='Det ser ut som '+String(g.name).toLowerCase();buzz()}else $('say').textContent='Skriv vad det är';
  setTimeout(()=>result(g),g?600:200)}
 async function result(g){
@@ -677,11 +679,11 @@ async function result(g){
 /* ===================== listor ===================== */
 function nextDec24(){const d=new Date();let y=d.getFullYear();if(d>new Date(y,11,24))y++;return y+'-12-24'}
 function newListSheet(l){const isNew=!l;l=l||{name:'',recipient:'',occasion:'Jul',date:nextDec24(),kid:true};
- openSheet(`<span class="lbl">${isNew?'Ny lista':'Ändra lista'}</span><h5>${isNew?'Vems lista?':esc(l.name)}</h5>
- <label class="field"><span>Mottagare</span><input id="lRec" value="${esc(l.recipient||'')}" placeholder="Ebbe"></label>
+ openSheet(`<h5>${isNew?'Vems lista?':esc(l.name)}</h5>
+ <label class="field"><input id="lRec" value="${esc(l.recipient||'')}" placeholder="Mottagarens namn" aria-label="Mottagare" autocomplete="off"></label>
  <div class="row2"><label class="field"><span>Tillfälle</span><input id="lOcc" value="${esc(l.occasion||'')}" placeholder="Jul, födelsedag"></label><label class="field"><span>Datum</span><input id="lDate" type="date" value="${esc(l.date||'')}"></label></div>
- <label class="field"><span>Listans namn</span><input id="lName" value="${esc(l.name)}" placeholder="Ebbes jullista"></label>
- <button class="it" role="switch" aria-checked="${l.kid?'true':'false'}" id="lKid" style="padding:0;min-height:52px">Mottagaren ska inte se paxningar<span class="sw2"></span></button>
+ <label class="field"><span>Listans namn</span><input id="lName" value="${esc(l.name)}" placeholder="Fylls i av sig själv"></label>
+ <button class="it" role="switch" aria-checked="${l.kid?'true':'false'}" id="lKid" style="padding:0;min-height:52px">Dölj paxningar för mottagaren<span class="sw2"></span></button>
  <div style="height:12px"></div><button class="btn act press" id="lSave"><span>${isNew?'Skapa listan':'Spara'}</span></button>`);
  $('lKid').onclick=()=>{$('lKid').setAttribute('aria-checked',$('lKid').getAttribute('aria-checked')!=='true');buzz()};
  const auto=()=>{if($('lName').dataset.touched)return;const r=$('lRec').value.trim(),o=$('lOcc').value.trim().toLowerCase();$('lName').value=r?`${r}s ${o?o+(/lista$/.test(o)?'':'lista'):'lista'}`:''};
@@ -782,17 +784,28 @@ $('nav').addEventListener('click',e=>{const a=e.target.closest('a');if(a){buzz()
 $('v-lista').addEventListener('scroll',()=>{const y=$('v-lista').scrollTop;$('hdr').classList.toggle('compact',y>40);const h=$('hero');if(h){if(!RM)h.style.transform=`translateY(${Math.min(y,200)*.25}px)`;h.style.opacity=Math.max(0,1-y/260)}},{passive:true});
 $('fab').onclick=()=>openAdd();
 app.addEventListener('pointerdown',e=>{const b=e.target.closest('.btn,.fab');if(!b||RM)return;const r=b.getBoundingClientRect();const s=Math.max(r.width,r.height);const i=document.createElement('i');i.className='ripple';i.style.cssText=`width:${s}px;height:${s}px;left:${e.clientX-r.left-s/2}px;top:${e.clientY-r.top-s/2}px`;b.appendChild(i);setTimeout(()=>i.remove(),600)});
+/* Bilden följer arket bild för bild, så de rör sig som en enhet */
+function glide(c,from,getTo,ms,done){const p=app.getBoundingClientRect();const t0=performance.now();let last=null,still=0;
+ const ease=t=>1-Math.pow(1-t,4);
+ const step=now=>{const t=Math.min(1,(now-t0)/ms),k=ease(t);const to=getTo();
+  const x=from.left+(to.left-from.left)*k,y=from.top+(to.top-from.top)*k,w=from.width+(to.width-from.width)*k,h=from.height+(to.height-from.height)*k;
+  c.style.left=x-p.left+'px';c.style.top=y-p.top+'px';c.style.width=w+'px';c.style.height=h+'px';c.style.borderRadius=(from.r+(to.r-from.r)*k)+'px';
+  const key=Math.round(to.top)+','+Math.round(to.left);still=key===last?still+1:0;last=key;
+  if(t<1||(still<3&&now-t0<ms+900))requestAnimationFrame(step);else done()};
+ requestAnimationFrame(step)}
+function rr(el){const r=el.getBoundingClientRect();return{left:r.left,top:r.top,width:r.width,height:r.height,r:parseFloat(getComputedStyle(el).borderTopLeftRadius)||0}}
 function openSheet(h,img){const sh=$('sheet');$('sheetIn').innerHTML=h;sh.scrollTop=0;$('scrim').classList.add('on');sh.classList.remove('drag');sh.style.transform='';fromImg=null;wireForm();
  const hero=$('heroImg');
- if(img&&hero&&hero.tagName==='IMG'&&!RM){fromImg=img;sh.style.transition='none';sh.classList.add('on');const to=hero.getBoundingClientRect();sh.classList.remove('on');void sh.offsetWidth;sh.style.transition='';
-  const p=app.getBoundingClientRect(),from=img.getBoundingClientRect();hero.style.visibility='hidden';
-  const c=document.createElement('img');c.className='clone';c.src=img.src;Object.assign(c.style,{left:from.left-p.left+'px',top:from.top-p.top+'px',width:from.width+'px',height:from.height+'px',borderRadius:'20px'});app.appendChild(c);
-  c.animate([{left:from.left-p.left+'px',top:from.top-p.top+'px',width:from.width+'px',height:from.height+'px'},{left:to.left-p.left+'px',top:to.top-p.top+'px',width:to.width+'px',height:to.height+'px'}],{duration:560,easing:SOFT,fill:'forwards'}).onfinish=()=>{hero.style.visibility='';c.remove()}}
+ if(img&&hero&&hero.tagName==='IMG'&&!RM){fromImg=img;const from=rr(img);
+  const c=document.createElement('img');c.className='clone';c.src=img.src;app.appendChild(c);
+  hero.style.visibility='hidden';img.style.visibility='hidden';
+  glide(c,from,()=>rr(hero),520,()=>{hero.style.visibility='';c.remove();img.style.visibility=''})}
  requestAnimationFrame(()=>sh.classList.add('on'))}
 function closeSheet(){const sh=$('sheet');$('scrim').classList.remove('on');const hero=$('heroImg');
- if(fromImg&&hero&&hero.tagName==='IMG'&&!RM&&fromImg.isConnected){const p=app.getBoundingClientRect(),from=hero.getBoundingClientRect(),to=fromImg.getBoundingClientRect();
-  if(to.top>p.top+40&&to.bottom<p.bottom-80){hero.style.visibility='hidden';const c=document.createElement('img');c.className='clone';c.src=hero.src;app.appendChild(c);
-   c.animate([{left:from.left-p.left+'px',top:from.top-p.top+'px',width:from.width+'px',height:from.height+'px',borderRadius:'20px'},{left:to.left-p.left+'px',top:to.top-p.top+'px',width:to.width+'px',height:to.height+'px',borderRadius:'20px'}],{duration:480,easing:SOFT,fill:'forwards'}).onfinish=()=>c.remove()}}
+ if(fromImg&&hero&&hero.tagName==='IMG'&&!RM&&fromImg.isConnected){const p=app.getBoundingClientRect(),tr=fromImg.getBoundingClientRect();
+  if(tr.top>p.top+40&&tr.bottom<p.bottom-80){const src=fromImg,from=rr(hero);const c=document.createElement('img');c.className='clone';c.src=hero.src;app.appendChild(c);
+   hero.style.visibility='hidden';src.style.visibility='hidden';
+   glide(c,from,()=>rr(src),420,()=>{src.style.visibility='';c.remove()})}}
  fromImg=null;sh.classList.remove('on');sh.style.transform=''}
 $('scrim').onclick=closeSheet;$('sheetX').onclick=closeSheet;
 (()=>{const sh=$('sheet'),g=$('grab');let y0=null,dy=0,t0=0;
