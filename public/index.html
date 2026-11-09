@@ -313,6 +313,9 @@ a{color:inherit}
 .cam .hd button{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.12);font:700 16px 'Space Mono';color:#F6EFE4}
 .vf{position:relative;flex:1;margin:0 16px;overflow:hidden;border-radius:var(--r);min-height:0;background:radial-gradient(circle at 50% 45%,#2A1F18,#120C08 70%)}
 .vf img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;transition:opacity .3s}
+.vf video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:0;transition:opacity .4s}
+.vf video.live{opacity:1}
+.vf.lock video{opacity:0}
 .vf .fr{position:absolute;left:50%;top:50%;width:min(70%,260px);aspect-ratio:1;transform:translate(-50%,-50%);transition:width var(--t-spring) var(--spring)}
 .vf .fr i{position:absolute;width:30px;height:30px;border:4px solid #F6EFE4;transition:border-color var(--t-fx)}
 .vf .fr i:nth-child(1){left:0;top:0;border-right:0;border-bottom:0;border-radius:14px 0 0 0}.vf .fr i:nth-child(2){right:0;top:0;border-left:0;border-bottom:0;border-radius:0 14px 0 0}
@@ -320,6 +323,8 @@ a{color:inherit}
 .vf.lock .fr{width:min(62%,220px)}.vf.lock .fr i{border-color:#F0B340}
 .vf .scan{position:absolute;left:14%;right:14%;height:2px;background:linear-gradient(90deg,transparent,#F0B340,transparent);box-shadow:0 0 16px #F0B340;top:20%;animation:scan 2.2s ease-in-out infinite;opacity:0;transition:opacity .3s}
 .vf.lock .scan{opacity:1}
+.vf.flash::after{content:'';position:absolute;inset:0;background:#fff;animation:fl .3s ease-out forwards;z-index:5}
+@keyframes fl{from{opacity:.85}to{opacity:0}}
 @keyframes scan{50%{top:76%}}
 .vf .say{position:absolute;left:0;right:0;bottom:16px;text-align:center;font:700 12px 'Space Mono';text-transform:uppercase;letter-spacing:.06em;display:flex;align-items:center;justify-content:center;gap:8px;padding:0 20px}
 .vf .say i{width:8px;height:8px;border-radius:50%;background:#FF6A47;animation:blink 1s steps(2) infinite}
@@ -382,6 +387,7 @@ canvas.conf{position:absolute;inset:0;z-index:70;pointer-events:none}
  <div class="cam" id="cam" aria-label="Fota">
   <div class="hd"><span class="lbl" id="camTitle">Fota till listan</span><button id="camX" aria-label="Stäng">✕</button></div>
   <div class="vf" id="vf">
+   <video id="vfVid" playsinline muted autoplay></video>
    <img id="vfImg" alt="">
    <div class="fr"><i></i><i></i><i></i><i></i></div>
    <div class="scan"></div>
@@ -629,14 +635,34 @@ async function addItem(v,thumb,imgUrl){closeSheet();buzz(14);const tmp={id:'tmp'
 
 /* ===================== kamera ===================== */
 let camBlob=null,camBusy=false;
-function openCam(){$('camTitle').textContent='Fota till '+S.list.name;resetCam();$('cam').classList.add('on');setTimeout(()=>{if($('cam').classList.contains('on')&&!camBlob)$('camIn').click()},RM?0:350)}
-function resetCam(){camBlob=null;camBusy=false;$('vf').classList.remove('lock');$('hit').classList.remove('on');$('vfImg').removeAttribute('src');$('vfImg').style.opacity=0;$('say').textContent='Ta en bild av saken';$('shutter').style.display=''}
-$('camX').onclick=()=>$('cam').classList.remove('on');
-$('shutter').onclick=()=>{if(camBlob)recognize();else $('camIn').click()};
+/* Bakåt-gesten stänger översta lagret */
+let popSkip=false,sheetOpen=false;
+function layerPush(){if(!(history.state&&history.state.paxa))history.pushState({paxa:1,h:location.hash},'')}
+function layerPop(){if(history.state&&history.state.paxa&&history.state.h===location.hash&&!$('cam').classList.contains('on')&&!sheetOpen){popSkip=true;history.back()}}
+addEventListener('popstate',()=>{if(popSkip){popSkip=false;return}
+ if(sheetOpen){closeSheet(true);if($('cam').classList.contains('on'))layerPush()}else if($('cam').classList.contains('on'))closeCam(true)});
+let camStream=null;
+async function startLive(){if(camStream||!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)return false;
+ try{camStream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1920},height:{ideal:1440}},audio:false});
+  if(!$('cam').classList.contains('on')){stopLive();return false}
+  const v=$('vfVid');v.srcObject=camStream;await v.play().catch(()=>{});v.classList.add('live');return true}
+ catch(e){camStream=null;$('say').textContent='Tryck för att ta en bild';return false}}
+function stopLive(){if(camStream){camStream.getTracks().forEach(t=>t.stop());camStream=null}const v=$('vfVid');v.srcObject=null;v.classList.remove('live')}
+function snap(){const v=$('vfVid');if(!camStream||!v.videoWidth)return null;const k=Math.min(1,1280/Math.max(v.videoWidth,v.videoHeight));
+ const c=document.createElement('canvas');c.width=Math.round(v.videoWidth*k);c.height=Math.round(v.videoHeight*k);c.getContext('2d').drawImage(v,0,0,c.width,c.height);
+ return new Promise(r=>c.toBlob(b=>r(b),'image/jpeg',.86))}
+function openCam(){layerPush();$('camTitle').textContent='Fota till '+S.list.name;resetCam();$('cam').classList.add('on');startLive()}
+function closeCam(fromPop){$('cam').classList.remove('on');stopLive();if(fromPop!==true)setTimeout(layerPop,0)}
+function resetCam(){camBlob=null;camBusy=false;$('vf').classList.remove('lock');$('hit').classList.remove('on');$('vfImg').removeAttribute('src');$('vfImg').style.opacity=0;$('say').textContent='Ta en bild av saken';$('shutter').style.visibility=''}
+document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLive();else if($('cam').classList.contains('on')&&!camBlob)startLive()});
+$('camX').onclick=closeCam;
+$('shutter').onclick=async()=>{if(camBlob){recognize();return}
+ const b=await snap();if(b){buzz(30);const v=$('vf');v.classList.add('flash');setTimeout(()=>v.classList.remove('flash'),300);camBlob=b;$('vfImg').src=URL.createObjectURL(b);$('vfImg').style.opacity=1;stopLive();setTimeout(recognize,200)}
+ else $('camIn').click()};
 $('pickBtn').onclick=()=>$('pickIn').click();
-$('linkBtn').onclick=()=>{$('cam').classList.remove('on');openAdd('')};
+$('linkBtn').onclick=()=>{closeCam();openAdd('')};
 $('camIn').onchange=e=>gotFile(e.target.files[0]);$('pickIn').onchange=e=>gotFile(e.target.files[0]);
-async function gotFile(f){if(!f)return;$('camIn').value='';$('pickIn').value='';try{camBlob=await resize(f,1280,.86)}catch(e){camBlob=f}
+async function gotFile(f){if(!f)return;stopLive();$('camIn').value='';$('pickIn').value='';try{camBlob=await resize(f,1280,.86)}catch(e){camBlob=f}
  $('vfImg').src=URL.createObjectURL(camBlob);$('vfImg').style.opacity=1;setTimeout(recognize,250)}
 function loadImg(blob){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(blob)})}
 async function resize(blob,max,q,box){const im=await loadImg(blob);let sx=0,sy=0,sw=im.naturalWidth,sh=im.naturalHeight;
@@ -646,9 +672,9 @@ async function resize(blob,max,q,box){const im=await loadImg(blob);let sx=0,sy=0
  return new Promise(r=>c.toBlob(b=>r(b),'image/jpeg',q))}
 const toDataUrl=b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)});
 function seeFail(d,st){const m={no_key:'Bildigenkänningen saknar nyckel.',timeout:'Igenkänningen tog för lång tid.',net:'Ingen kontakt med igenkänningen.'}[d&&d.error]||('Igenkänningen svarade inte'+(d&&d.detail?': '+String(d.detail).slice(0,80):st?' ('+st+')':'')+'.');console.warn('see',st,d);setTimeout(()=>toast(m),700)}
-async function recognize(){if(camBusy||!camBlob)return;camBusy=true;buzz(20);$('vf').classList.add('lock');$('shutter').style.display='none';$('say').textContent='Känner igen…';
+async function recognize(){if(camBusy||!camBlob)return;camBusy=true;buzz(20);$('vf').classList.add('lock');$('shutter').style.visibility='hidden';$('say').textContent='Känner igen…';
  let g=null;
- try{const small=await resize(camBlob,900,.8);const b64=(await toDataUrl(small)).split(',')[1];
+ try{const small=await resize(camBlob,768,.8);const b64=(await toDataUrl(small)).split(',')[1];
   const r=await fetch('/api/see',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64,media_type:'image/jpeg'}),signal:AbortSignal.timeout(25000)});
   const d=await r.json().catch(()=>({}));if(r.ok&&!d.error)g=d;else seeFail(d,r.status)}catch(e){seeFail({error:e.name==='TimeoutError'?'timeout':'net'},0)}
  if(g&&g.name){$('hit').classList.add('on');$('say').textContent='Det ser ut som '+String(g.name).toLowerCase();buzz()}else $('say').textContent='Skriv vad det är';
@@ -658,7 +684,7 @@ async function result(g){
  const box=g&&g.box&&isFinite(+g.box.w)&&+g.box.w>10?g.box:null;
  let thumbBlob;try{thumbBlob=await resize(camBlob,560,.78,box)}catch(e){thumbBlob=camBlob}
  let thumb=await toDataUrl(thumbBlob);if(thumb.length>110000){try{thumb=await toDataUrl(await resize(camBlob,420,.7,box))}catch(e){}}
- $('cam').classList.remove('on');
+ closeCam();
  openSheet(`<span class="lbl">${names.length?'Det ser ut som':'Vad är det?'}</span>
  <img class="big-img" src="${thumb}" alt="">
  ${names.length?`<div class="guess" id="guess">${names.map((n,i)=>`<button class="${i?'':'on'}">${esc(n)}</button>`).join('')}<button>Annat…</button></div>`:''}
@@ -794,19 +820,19 @@ function glide(c,from,getTo,ms,done){const p=app.getBoundingClientRect();const t
   if(t<1||(still<3&&now-t0<ms+900))requestAnimationFrame(step);else done()};
  requestAnimationFrame(step)}
 function rr(el){const r=el.getBoundingClientRect();return{left:r.left,top:r.top,width:r.width,height:r.height,r:parseFloat(getComputedStyle(el).borderTopLeftRadius)||0}}
-function openSheet(h,img){const sh=$('sheet');$('sheetIn').innerHTML=h;sh.scrollTop=0;$('scrim').classList.add('on');sh.classList.remove('drag');sh.style.transform='';fromImg=null;wireForm();
+function openSheet(h,img){const sh=$('sheet');layerPush();sheetOpen=true;$('sheetIn').innerHTML=h;sh.scrollTop=0;$('scrim').classList.add('on');sh.classList.remove('drag');sh.style.transform='';fromImg=null;wireForm();
  const hero=$('heroImg');
  if(img&&hero&&hero.tagName==='IMG'&&!RM){fromImg=img;const from=rr(img);
   const c=document.createElement('img');c.className='clone';c.src=img.src;app.appendChild(c);
   hero.style.visibility='hidden';img.style.visibility='hidden';
   glide(c,from,()=>rr(hero),520,()=>{hero.style.visibility='';c.remove();img.style.visibility=''})}
  requestAnimationFrame(()=>sh.classList.add('on'))}
-function closeSheet(){const sh=$('sheet');$('scrim').classList.remove('on');const hero=$('heroImg');
+function closeSheet(fromPop){const sh=$('sheet');sheetOpen=false;$('scrim').classList.remove('on');const hero=$('heroImg');
  if(fromImg&&hero&&hero.tagName==='IMG'&&!RM&&fromImg.isConnected){const p=app.getBoundingClientRect(),tr=fromImg.getBoundingClientRect();
   if(tr.top>p.top+40&&tr.bottom<p.bottom-80){const src=fromImg,from=rr(hero);const c=document.createElement('img');c.className='clone';c.src=hero.src;app.appendChild(c);
    hero.style.visibility='hidden';src.style.visibility='hidden';
    glide(c,from,()=>rr(src),420,()=>{src.style.visibility='';c.remove()})}}
- fromImg=null;sh.classList.remove('on');sh.style.transform=''}
+ fromImg=null;sh.classList.remove('on');sh.style.transform='';if(fromPop!==true)setTimeout(layerPop,0)}
 $('scrim').onclick=closeSheet;$('sheetX').onclick=closeSheet;
 (()=>{const sh=$('sheet'),g=$('grab');let y0=null,dy=0,t0=0;
  g.onpointerdown=e=>{y0=e.clientY;t0=performance.now();g.setPointerCapture(e.pointerId);sh.classList.add('drag')};
