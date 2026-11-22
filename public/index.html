@@ -10,12 +10,20 @@
 <meta name="description" content="Önskelistan där ingen ger samma present två gånger. Ingen reklam, ingen spårning, inget konto.">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="img/icon-192.png">
-<link rel="apple-touch-icon" href="img/icon-192.png">
+<link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Anton&family=Archivo:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="preload" href="/fonts/anton-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="preload" href="/fonts/archivo-latin-400-normal.woff2" as="font" type="font/woff2" crossorigin>
+<style>
+@font-face{font-family:'Anton';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/anton-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/archivo-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:500;font-display:swap;src:url(/fonts/archivo-latin-500-normal.woff2) format('woff2')}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:600;font-display:swap;src:url(/fonts/archivo-latin-600-normal.woff2) format('woff2')}
+@font-face{font-family:'Archivo';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/archivo-latin-700-normal.woff2) format('woff2')}
+@font-face{font-family:'Space Mono';font-style:normal;font-weight:400;font-display:swap;src:url(/fonts/space-mono-latin-400-normal.woff2) format('woff2')}
+@font-face{font-family:'Space Mono';font-style:normal;font-weight:700;font-display:swap;src:url(/fonts/space-mono-latin-700-normal.woff2) format('woff2')}
+</style>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -23,7 +31,7 @@
  --soft:cubic-bezier(.2,.8,.2,1);
  --t-spring:.6s;--t-soft:.42s;--t-fx:.2s;--t-fast:.12s;
  --bg:#F6EFE4;--bg2:#EDE3D3;--bg3:#DCCDB6;--card:#FFFCF7;--glass:rgba(246,239,228,.84);
- --ink:#1E1613;--ink2:#6B5A4D;--ink3:#A08E7E;
+ --ink:#1E1613;--ink2:#6B5A4D;--ink3:#7A6A5D;
  --act:#E8502F;--act2:#FFD9CE;--on-act:#FFF8F3;
  --pax:#1F6E6B;--pax2:#CFE7E3;--on-pax:#F2FBF9;
  --pris:#F0B340;--pris2:#FBE7B8;--on-pris:#2A1C08;
@@ -437,10 +445,10 @@ const EX=[
 const S={list:null,role:null,tokens:null,items:[],pax:[],events:[],loaded:false,err:null};
 let token=null,filter='alla',cur='lista',deckIdx=0,kid=false,hidden=new Set(),seen=new Set(),pollT=null,chan=null,sb=null;
 const ORDER=['lista','kort','akt','mer'];
-const me={id:ls.get('pl-guest')||(()=>{const v='g'+Math.random().toString(36).slice(2,10)+Date.now().toString(36);ls.set('pl-guest',v);return v})(),name:ls.get('pl-name','')};
+const me={id:ls.get('pl-guest')||(()=>{const v='g'+Array.from(crypto.getRandomValues(new Uint8Array(24)),b=>b.toString(16).padStart(2,'0')).join('');ls.set('pl-guest',v);return v})(),name:ls.get('pl-name','')};
 let firstPax=!ls.get('pl-vows',false);
 const mine=()=>ls.get('pl-lists',[]);
-function remember(){if(!S.list||!token)return;const arr=mine().filter(l=>l.id!==S.list.id);arr.unshift({id:S.list.id,name:S.list.name,token,role:S.role,recipient:S.list.recipient});ls.set('pl-lists',arr.slice(0,30))}
+function remember(){if(!S.list||!token)return;const arr=mine().filter(l=>l.id!==S.list.id);arr.unshift({id:S.list.id,name:S.list.name,token,role:S.role,recipient:S.list.recipient,gt:S.tokens&&S.tokens.guest||null});ls.set('pl-lists',arr.slice(0,30))}
 function forget(id){ls.set('pl-lists',mine().filter(l=>l.id!==id))}
 const canPax=()=>S.role&&S.role!=='recipient'&&!kid;
 const isOwner=()=>S.role==='owner';
@@ -454,12 +462,12 @@ async function rpc(fn,args){const r=await fetch(SUPA+'/rest/v1/rpc/paxa_'+fn,{me
  const t=await r.text();return t?JSON.parse(t):null}
 const ERR={not_allowed:'Du får inte göra det här.',not_found:'Hittades inte.',list_full:'Listan är full.',name_required:'Skriv ett namn.',thumb_too_big:'Bilden blev för stor.',taken:'Någon hann före.'};
 const errTx=e=>ERR[(e&&e.code)||'']||'Kunde inte spara. Försök igen.';
-async function load(silent){if(!token)return;try{const d=await rpc('get_list',{p_token:token});
+async function load(silent){if(!token)return;try{const d=await rpc('get_list',{p_token:token,p_guest:me.id});
  if(!d){S.err='missing';S.loaded=true;render();return}
- S.list=d.list;S.role=d.role;S.tokens=d.tokens;S.items=d.items||[];S.pax=d.pax||[];const newEv=(d.events||[]);if(S.loaded&&newEv.length&&S.events.length&&newEv[0].id!==S.events[0].id&&cur!=='akt'){$('badge').hidden=false;$('badge').textContent='•'}S.events=newEv;S.err=null;S.loaded=true;remember();render();}
+ const mark=o=>{if(o.mine)o.by=me.id;return o};S.list=d.list;S.role=d.role;S.tokens=d.tokens;S.items=(d.items||[]).map(mark);S.pax=(d.pax||[]).map(mark);const newEv=(d.events||[]).map(mark);if(S.loaded&&newEv.length&&S.events.length&&newEv[0].id!==S.events[0].id&&!newEv[0].mine&&cur!=='akt'){$('badge').hidden=false;$('badge').textContent='•'}S.events=newEv;S.err=null;S.loaded=true;remember();maskOwner();render();if(pendingShare){const v=pendingShare;pendingShare=null;setTimeout(()=>openAdd(v),350)}}
  catch(e){if(!silent)toast('Kunde inte nå servern');S.loaded=true;S.err=S.list?null:'net';render()}}
 function startSync(){stopSync();if(!token||!S.list)return;
- pollT=setInterval(()=>{if(document.visibilityState==='visible')load(true)},8000);
+ pollT=setInterval(()=>{if(document.visibilityState==='visible')load(true)},chan?45000:20000);
  if(sb){try{chan=sb.channel('paxa-'+S.list.id);chan.on('broadcast',{event:'change'},()=>load(true)).subscribe()}catch(e){chan=null}}}
 function stopSync(){clearInterval(pollT);pollT=null;if(chan){try{sb.removeChannel(chan)}catch(e){}chan=null}}
 function ping(){if(chan){try{chan.send({type:'broadcast',event:'change',payload:{}})}catch(e){}}}
@@ -467,11 +475,25 @@ document.addEventListener('visibilitychange',()=>{if(document.visibilityState===
 (function loadSb(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';s.onload=()=>{try{sb=window.supabase.createClient(SUPA,KEY,{realtime:{params:{eventsPerSecond:2}}});if(S.list)startSync()}catch(e){}};document.head.appendChild(s)})();
 
 /* ===================== routing ===================== */
-function parseHash(){const h=location.hash.match(/^#list-([A-Za-z0-9]+)/);return h?h[1]:null}
+function parseHash(){const h=location.hash.match(/^#list-([A-Za-z0-9]+)/);if(!h)return null;const o=mine().find(l=>l.role==='owner'&&l.gt===h[1]);return o?o.token:h[1]}
+/* Ägarlänken visas aldrig i adressfältet. Där står gästlänken, så det som kopieras därifrån är rätt länk att dela. */
+function saveKey(ot){const url=location.origin+location.pathname+'#list-'+ot;
+ openSheet(`<span class="lbl">Ett steg till</span><h5>Spara din ägarlänk</h5><p class="fine">Den här länken är din nyckel till listan. Telefonen kan rensa sparade uppgifter efter en tid, särskilt iPhone. Skicka länken till dig själv eller spara den i Anteckningar, så tappar du aldrig listan. Dela den inte med andra.</p>
+ <button class="btn act press" id="kShare">Skicka till mig själv</button><button class="btn ghost press" id="kCopy" style="margin-top:10px">Kopiera länken</button><button class="btn ghost press" id="kLater" style="margin-top:10px">Senare</button>`);
+ $('kShare').onclick=async()=>{if(navigator.share){try{await navigator.share({title:'Min ägarlänk till PaxaListan',text:'Ägarlänk till '+(S.list?S.list.name:'min lista')+'. Dela inte med andra.',url});closeSheet();toast('Bra, nu är listan säker.');return}catch(e){if(e&&e.name==='AbortError')return}}$('kCopy').click()};
+ $('kCopy').onclick=async()=>{try{await navigator.clipboard.writeText(url);closeSheet();toast('Kopierad. Klistra in den i Anteckningar.')}catch(e){prompt('Kopiera länken:',url)}};
+ $('kLater').onclick=closeSheet}
+function maskOwner(){if(S.role!=='owner'||!S.tokens||!S.tokens.guest)return;const want='#list-'+S.tokens.guest;if(location.hash===want)return;
+ const st=history.state&&history.state.paxa?Object.assign({},history.state,{h:want}):history.state;history.replaceState(st,'',location.pathname+want)}
+let pendingShare=null;
+/* Bild som inte laddar (spärrad butiksbild, död länk): prova miniatyren, annars en lugn ersättare */
+document.addEventListener('error',e=>{const t=e.target;if(!t||t.tagName!=='IMG'||t.id==='vfImg'||t.dataset.fb)return;
+ if(t.dataset.alt){const a=t.dataset.alt;t.dataset.alt='';t.src=a;return}
+ t.dataset.fb=1;const d=document.createElement('div');d.className='ph'+(t.className?' '+t.className:'');if(t.id)d.id=t.id;d.innerHTML=PHOTO;d.style.cssText='display:flex;align-items:center;justify-content:center;color:var(--ink3)';t.replaceWith(d)},true);
 async function route(){const t=parseHash();
  if(t&&t!==token){token=t;S.loaded=false;S.list=null;S.err=null;deckIdx=0;stopSync();render();await load();startSync()}
- else if(!t){const last=mine()[0];if(last){location.replace('#list-'+last.token);return}token=null;S.list=null;S.loaded=true;stopSync();render()}
- const q=new URLSearchParams(location.search);if(q.get('url')||q.get('text')||q.get('title')){const v=q.get('url')||q.get('text')||q.get('title');history.replaceState(null,'',location.pathname+location.hash);setTimeout(()=>{if(S.list)openAdd(v)},600)}}
+ else if(!t){const last=mine()[0];if(last){location.replace('#list-'+(last.role==='owner'&&last.gt||last.token));return}token=null;S.list=null;S.loaded=true;stopSync();render()}
+ const q=new URLSearchParams(location.search);if(q.get('url')||q.get('text')||q.get('title')){const v=q.get('url')||q.get('text')||q.get('title');history.replaceState(null,'',location.pathname+location.hash);if(S.list&&S.loaded)openAdd(v);else pendingShare=v}}
 addEventListener('hashchange',route);
 
 /* ===================== render ===================== */
@@ -559,7 +581,7 @@ function renderAll(){renderLista();if(cur==='kort')deck();if(cur==='akt')renderF
 let fromImg=null;
 function detail(u,img){const it=findItem(u);if(!it)return;const p=paxOf(u);const me_=p&&p.by===me.id,tk=p&&!me_;const own=it.by===me.id||isOwner();
  const stepN=['Paxad','Köpt','Inslagen'];const st=me_?(p.st||0):0;const hidePax=!canPax();
- openSheet(`<div class="det">${it.img||it.thumb?`<img class="hero-img" id="heroImg" src="${esc(it.img||it.thumb)}" alt="${esc(it.name)}">`:`<div class="hero-img" id="heroImg" style="display:flex;align-items:center;justify-content:center;color:var(--ink3)">${PHOTO}</div>`}
+ openSheet(`<div class="det">${it.img||it.thumb?`<img class="hero-img" id="heroImg" src="${esc(it.img||it.thumb)}" data-alt="${it.img&&it.thumb?esc(it.thumb):''}" alt="${esc(it.name)}">`:`<div class="hero-img" id="heroImg" style="display:flex;align-items:center;justify-content:center;color:var(--ink3)">${PHOTO}</div>`}
  <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">${it.ex?'<span class="tag ex">Exempel</span>':''}${it.prio?'<span class="tag prio">★ Viktig</span>':''}${it.was&&it.price&&+it.was>+it.price?`<span class="tag drop">Sänkt ${Math.round(it.was-it.price)} kr</span>`:''}${it.price==null?'<span class="tag q">Pris?</span>':''}${tk&&!hidePax?'<span class="tag paxt">Paxad</span>':''}${it.cat?`<span class="tag">${esc(it.cat)}</span>`:''}</div>
  <h5>${esc(it.name)}</h5>
  ${it.note?`<div class="note"><span class="lbl">Anteckning</span><br>${esc(it.note)}</div>`:''}
@@ -580,9 +602,17 @@ function detail(u,img){const it=findItem(u);if(!it)return;const p=paxOf(u);const
  if($('dMove'))$('dMove').onclick=()=>moveSheet(it);
  if($('dEdit'))$('dEdit').onclick=()=>editSheet(it);
 }
+/* Ångra i 5 s. Stängs fliken innan dess skickas raderingen direkt (keepalive), så den aldrig tappas. */
+const pendDel=new Map();
+function sendDel(id,keep){const p=pendDel.get(id);if(!p)return;pendDel.delete(id);clearTimeout(p.t);
+ const body={p_token:p.token,p_guest:me.id,p_guest_name:me.name,p_item:id};
+ if(keep){try{fetch(SUPA+'/rest/v1/rpc/paxa_delete_item',{method:'POST',keepalive:true,headers:{apikey:KEY,Authorization:'Bearer '+KEY,'Content-Type':'application/json'},body:JSON.stringify(body)})}catch(e){}return}
+ rpc('delete_item',body).then(()=>ping(),e=>toast(errTx(e))).finally(()=>{hidden.delete(id);load(true)})}
+addEventListener('pagehide',()=>{[...pendDel.keys()].forEach(id=>sendDel(id,true))});
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='hidden')[...pendDel.keys()].forEach(id=>sendDel(id,true))});
 function softDelete(it){hidden.add(it.id);const c=document.querySelector(`.card[data-u="${it.id}"]`);if(c)c.classList.add('gone');setTimeout(renderAll,350);
- let undone=false;toast('Tog bort '+it.name,()=>{undone=true;hidden.delete(it.id);renderAll()},5000);
- setTimeout(async()=>{if(undone)return;try{await rpc('delete_item',{p_token:token,p_guest:me.id,p_guest_name:me.name,p_item:it.id});ping()}catch(e){toast(errTx(e))}hidden.delete(it.id);load(true)},5200)}
+ pendDel.set(it.id,{token,t:setTimeout(()=>sendDel(it.id),5200)});
+ toast('Tog bort '+it.name,()=>{const p=pendDel.get(it.id);if(p){clearTimeout(p.t);pendDel.delete(it.id)}hidden.delete(it.id);renderAll()},5000)}
 function moveSheet(it){const others=mine().filter(l=>l.role==='owner'&&l.id!==S.list.id);
  openSheet(`<span class="lbl">Flytta</span><h5>${esc(it.name)}</h5><p>Till vilken lista?</p><div class="grp" style="margin:12px 0">${others.map(l=>`<button class="it mv" data-t="${l.token}"><span class="dot"></span>${esc(l.name)}<span class="r">›</span></button>`).join('')}</div>`);
  $('sheetIn').querySelectorAll('.mv').forEach(b=>b.onclick=async()=>{const to=others.find(l=>l.token===b.dataset.t);closeSheet();buzz();hidden.add(it.id);renderAll();
@@ -620,7 +650,7 @@ function parseUrl(s){try{const u=new URL(/^https?:/i.test(s)?s:'https://'+s);if(
 async function quick(s){if(!s)return;const out=$('qOut');const u=parseUrl(s);let v=u?{name:u.name,shop:u.shop,url:u.url,price:null,thumb:null}:{name:s,shop:null,url:null,price:null,thumb:null};
  out.innerHTML=`<div class="found"><div class="ph">${PHOTO}</div><div style="flex:1;min-width:0"><div class="skel" style="width:70%"></div><div class="skel" style="width:45%"></div></div></div>`;
  try{if(u){const r=await fetch('/api/peek?url='+encodeURIComponent(u.url),{signal:AbortSignal.timeout(9000)});if(r.ok){const d=await r.json();if(d.name)v.name=d.name;if(d.price!=null)v.price=+d.price;if(d.shop)v.shop=d.shop;if(d.image)v.thumb=d.image;if(d.cat)v.cat=d.cat}}
-  else{const r=await fetch('/api/see',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:s}),signal:AbortSignal.timeout(12000)});if(r.ok){const d=await r.json();if(d.name)v.name=d.name;if(CATS.includes(d.cat))v.cat=d.cat}}}catch(e){}
+  else{const r=await fetch('/api/see',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text:s,token}),signal:AbortSignal.timeout(12000)});if(r.ok){const d=await r.json();if(d.name)v.name=d.name;if(CATS.includes(d.cat))v.cat=d.cat}}}catch(e){}
  if(!v.cat)v.cat='Annat';if(!v.name)v.name=s.slice(0,60);
  out.innerHTML=`<div class="found">${v.thumb?`<img src="${esc(v.thumb)}" alt="" onerror="this.outerHTML='<div class=ph>${PHOTO.replace(/"/g,'&quot;')}</div>'">`:`<div class="ph">${PHOTO}</div>`}<div style="flex:1;min-width:0"><label class="field" style="margin:0"><input id="qName" value="${esc(v.name)}" style="min-height:44px;font-weight:600"></label><small>${v.shop?esc(v.shop)+' · ':''}${v.price!=null?kr(v.price):'<span class="tag q" style="padding:2px 6px">Pris?</span>'}</small></div></div>
  <div class="row2"><label class="field"><span>Pris (kr)</span><input id="qPrice" inputmode="decimal" value="${v.price??''}" placeholder="Tomt om du inte vet"></label><label class="field"><span>Anteckning</span><input id="qNote" placeholder="Storlek, färg"></label></div>
@@ -657,25 +687,26 @@ function resetCam(){camBlob=null;camBusy=false;$('vf').classList.remove('lock');
 document.addEventListener('visibilitychange',()=>{if(document.hidden)stopLive();else if($('cam').classList.contains('on')&&!camBlob)startLive()});
 $('camX').onclick=closeCam;
 $('shutter').onclick=async()=>{if(camBlob){recognize();return}
- const b=await snap();if(b){buzz(30);const v=$('vf');v.classList.add('flash');setTimeout(()=>v.classList.remove('flash'),300);camBlob=b;$('vfImg').src=URL.createObjectURL(b);$('vfImg').style.opacity=1;stopLive();setTimeout(recognize,200)}
+ const b=await snap();if(b){buzz(30);const v=$('vf');v.classList.add('flash');setTimeout(()=>v.classList.remove('flash'),300);camBlob=b;showVf(b);stopLive();setTimeout(recognize,200)}
  else $('camIn').click()};
 $('pickBtn').onclick=()=>$('pickIn').click();
 $('linkBtn').onclick=()=>{closeCam();openAdd('')};
 $('camIn').onchange=e=>gotFile(e.target.files[0]);$('pickIn').onchange=e=>gotFile(e.target.files[0]);
 async function gotFile(f){if(!f)return;stopLive();$('camIn').value='';$('pickIn').value='';try{camBlob=await resize(f,1280,.86)}catch(e){camBlob=f}
- $('vfImg').src=URL.createObjectURL(camBlob);$('vfImg').style.opacity=1;setTimeout(recognize,250)}
-function loadImg(blob){return new Promise((res,rej)=>{const i=new Image();i.onload=()=>res(i);i.onerror=rej;i.src=URL.createObjectURL(blob)})}
+ showVf(camBlob);setTimeout(recognize,250)}
+function loadImg(blob){return new Promise((res,rej)=>{const i=new Image(),u=URL.createObjectURL(blob);i.onload=()=>{URL.revokeObjectURL(u);res(i)};i.onerror=e=>{URL.revokeObjectURL(u);rej(e)};i.src=u})}
+function showVf(b){const im=$('vfImg');if(im.src&&im.src.startsWith('blob:'))URL.revokeObjectURL(im.src);im.src=URL.createObjectURL(b);im.style.opacity=1}
 async function resize(blob,max,q,box){const im=await loadImg(blob);let sx=0,sy=0,sw=im.naturalWidth,sh=im.naturalHeight;
  if(box){const bx=Math.max(0,Math.min(95,+box.x||0))/100,by=Math.max(0,Math.min(95,+box.y||0))/100,bw=Math.max(.2,Math.min(1,(+box.w||100)/100)),bh=Math.max(.2,Math.min(1,(+box.h||100)/100));
   const pad=.06;sx=Math.max(0,(bx-pad)*sw);sy=Math.max(0,(by-pad)*sh);sw=Math.min(im.naturalWidth-sx,(bw+2*pad)*im.naturalWidth);sh=Math.min(im.naturalHeight-sy,(bh+2*pad)*im.naturalHeight)}
  const k=Math.min(1,max/Math.max(sw,sh));const c=document.createElement('canvas');c.width=Math.round(sw*k);c.height=Math.round(sh*k);c.getContext('2d').drawImage(im,sx,sy,sw,sh,0,0,c.width,c.height);
  return new Promise(r=>c.toBlob(b=>r(b),'image/jpeg',q))}
 const toDataUrl=b=>new Promise(r=>{const fr=new FileReader();fr.onload=()=>r(fr.result);fr.readAsDataURL(b)});
-function seeFail(d,st){const m={no_key:'Bildigenkänningen saknar nyckel.',timeout:'Igenkänningen tog för lång tid.',net:'Ingen kontakt med igenkänningen.'}[d&&d.error]||('Igenkänningen svarade inte'+(d&&d.detail?': '+String(d.detail).slice(0,80):st?' ('+st+')':'')+'.');console.warn('see',st,d);setTimeout(()=>toast(m),700)}
+function seeFail(d,st){const m={limit:'Dagens gräns för bildigenkänning är nådd. Skriv namnet själv.',bad_token:'Listan hittades inte.',no_key:'Bildigenkänningen saknar nyckel.',timeout:'Igenkänningen tog för lång tid.',net:'Ingen kontakt med igenkänningen.'}[d&&d.error]||('Igenkänningen svarade inte'+(d&&d.detail?': '+String(d.detail).slice(0,80):st?' ('+st+')':'')+'.');console.warn('see',st,d);setTimeout(()=>toast(m),700)}
 async function recognize(){if(camBusy||!camBlob)return;camBusy=true;buzz(20);$('vf').classList.add('lock');$('shutter').style.visibility='hidden';$('say').textContent='Känner igen…';
  let g=null;
  try{const small=await resize(camBlob,768,.8);const b64=(await toDataUrl(small)).split(',')[1];
-  const r=await fetch('/api/see',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64,media_type:'image/jpeg'}),signal:AbortSignal.timeout(25000)});
+  const r=await fetch('/api/see',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({image:b64,media_type:'image/jpeg',token}),signal:AbortSignal.timeout(25000)});
   const d=await r.json().catch(()=>({}));if(r.ok&&!d.error)g=d;else seeFail(d,r.status)}catch(e){seeFail({error:e.name==='TimeoutError'?'timeout':'net'},0)}
  if(g&&g.name){$('hit').classList.add('on');$('say').textContent='Det ser ut som '+String(g.name).toLowerCase();buzz()}else $('say').textContent='Skriv vad det är';
  setTimeout(()=>result(g),g?600:200)}
@@ -717,7 +748,7 @@ function newListSheet(l){const isNew=!l;l=l||{name:'',recipient:'',occasion:'Jul
  $('lSave').onclick=async()=>{const name=$('lName').value.trim()||($('lRec').value.trim()?$('lRec').value.trim()+'s lista':'');if(!name){$('lName').closest('.field').classList.add('err');return}
   const a={p_name:name,p_recipient:$('lRec').value.trim()||null,p_occasion:$('lOcc').value.trim()||null,p_date:$('lDate').value||null,p_kid:$('lKid').getAttribute('aria-checked')==='true'};
   $('lSave').disabled=true;
-  try{if(isNew){const r=await rpc('create_list',a);closeSheet();ls.set('pl-lists',[{id:r.id,name,token:r.owner_token,role:'owner',recipient:a.p_recipient},...mine()]);location.hash='#list-'+r.owner_token;toast('Listan är skapad. Dela den under Mer.');if(cur!=='lista')show('lista')}
+  try{if(isNew){const r=await rpc('create_list',a);closeSheet();ls.set('pl-lists',[{id:r.id,name,token:r.owner_token,role:'owner',recipient:a.p_recipient,gt:r.guest_token},...mine()]);location.hash='#list-'+r.owner_token;setTimeout(()=>saveKey(r.owner_token),700);if(cur!=='lista')show('lista')}
    else{await rpc('update_list',{p_token:token,...a});closeSheet();ping();toast('Sparat');load(true)}}
   catch(e){$('lSave').disabled=false;toast(errTx(e))}}}
 function listSwitchSheet(){const my=mine();openSheet(`<span class="lbl">Byt lista</span><h5>Mina listor</h5><div class="grp" style="margin:10px 0 14px">${my.map(l=>`<a class="it ${S.list&&l.id===S.list.id?'cur':''}" href="#list-${l.token}" data-close><span class="dot" style="background:${l.role==='owner'?'var(--pax)':l.role==='guest'?'var(--pris)':'var(--bg3)'}"></span>${esc(l.name)}<span class="r">${l.role==='owner'?'Din':l.role==='guest'?'Gäst':'Mottagare'}</span></a>`).join('')}</div><button class="btn ghost press" id="nl">${GIFT}<span>Ny lista</span></button>`);
@@ -770,7 +801,7 @@ function deck(){const L=S.list;if(!L){$('deckArea').innerHTML=`<div class="empty
  const stack=left.slice(0,3);
  $('deckArea').innerHTML=`<div class="deckwrap" id="dw">${stack.map((it,k)=>`<div class="dk c${k+1}" style="z-index:${10-k}" data-u="${it.id}">
   <div class="st y">Paxa</div><div class="st n">Nästa</div>
-  <div class="face front">${it.thumb?`<img src="${esc(it.img||it.thumb)}" alt="${esc(it.name)}">`:`<div class="ph">${PHOTO}</div>`}<div class="t"><span class="lbl">${it.prio?'★ Viktig · ':''}${it.shop?esc(it.shop)+' · ':''}${kr(it.price)}</span><b>${esc(it.name)}</b></div></div>
+  <div class="face front">${it.thumb?`<img src="${esc(it.img||it.thumb)}" data-alt="${it.img?esc(it.thumb):''}" alt="${esc(it.name)}">`:`<div class="ph">${PHOTO}</div>`}<div class="t"><span class="lbl">${it.prio?'★ Viktig · ':''}${it.shop?esc(it.shop)+' · ':''}${kr(it.price)}</span><b>${esc(it.name)}</b></div></div>
   <div class="face back"><span class="lbl" style="color:var(--pris)">Mer om</span><div style="font-family:Anton;font-size:30px;text-transform:uppercase;margin:6px 0 10px">${esc(it.name)}</div><div class="shop"><span>${esc(it.shop||'Butik ej angiven')}</span><b>${kr(it.price)}</b></div>${it.note?`<p style="margin-top:14px;font-size:15px;opacity:.85">${esc(it.note)}</p>`:''}${it.url?`<p style="margin-top:14px"><a href="${esc(it.url)}" target="_blank" rel="noopener">Öppna länken</a></p>`:''}</div>
  </div>`).reverse().join('')}</div>
  <div class="dacts"><button class="btn ghost press" id="dkNo">Nästa</button><button class="btn ghost press" id="dkFlip">Vänd</button><button class="btn act press" id="dkYes">Paxa</button></div>`;
@@ -790,13 +821,13 @@ function deck(){const L=S.list;if(!L){$('deckArea').innerHTML=`<div class="empty
   setTimeout(deck,320)}}
 
 /* ===================== aktivitet ===================== */
-function renderFeed(){const list=S.events||[];$('aktN').textContent=list.length?'Senaste':'';
+function renderFeed(){const mask=kid||S.role==='recipient';const list=(S.events||[]).filter(e=>!(e.t==='secret'||(mask&&['pax','unpax','st'].includes(e.t))));$('aktN').textContent=list.length?'Senaste':'';
  if(!S.list){$('feed').innerHTML=`<div class="empty"><b>Ingen lista vald</b></div>`;return}
  if(!list.length){$('feed').innerHTML=`<div class="empty"><b>Inget har hänt än</b>Dela listan med släkten, så syns här vem som gjort vad.${isOwner()?`<button class="btn ghost press" id="aktInv">Dela listan</button>`:''}</div>`;const b=$('aktInv');if(b)b.onclick=()=>show('mer');return}
- const mask=kid||S.role==='recipient';
+
  $('feed').innerHTML=list.map((e,i)=>{const secret=e.t==='secret'||(mask&&['pax','unpax','st'].includes(e.t));const who=nameOf(e.by,e.by_name);
   const txt=secret?'gjorde något hemligt':e.t==='pax'?`paxade <b>${esc(e.name)}</b>`:e.t==='unpax'?`ångrade paxningen av <b>${esc(e.name)}</b>`:e.t==='add'?`lade till <b>${esc(e.name)}</b>`:e.t==='st'?`markerade <b>${esc(e.name)}</b> som ${esc(e.extra||'')}`:e.t==='del'?`tog bort <b>${esc(e.name)}</b>`:esc(e.name||'');
-  return `<div class="ev" style="animation-delay:${Math.min(i,8)*50}ms"><span class="av">${esc((who||'?')[0])}</span><p><b>${esc(who)}</b> ${txt}<small>${ago(e.at)}</small></p>${e.thumb&&!secret?`<img src="${esc(e.thumb)}" alt="">`:''}</div>`}).join('')}
+  return `<div class="ev" style="animation-delay:${Math.min(i,8)*50}ms"><span class="av">${esc((who||'?')[0])}</span><p><b>${esc(who)}</b> ${txt}<small>${ago(e.at)}</small></p>${(()=>{const it=e.item&&S.items.find(x=>x.id===e.item);return it&&it.thumb&&!secret?`<img src="${esc(it.thumb)}" alt="">`:''})()}</div>`}).join('')}
 function ago(t){if(!t)return'';const d=Date.now()-t;if(d<60e3)return'nyss';if(d<3600e3)return Math.round(d/60e3)+' min';if(d<86400e3)return Math.round(d/3600e3)+' tim';return Math.round(d/86400e3)+' d'}
 
 /* ===================== vyer, ark ===================== */

@@ -2,10 +2,18 @@
 const CATS=['Leksaker','Böcker','Kläder','Teknik','Hem','Sport','Annat'];
 const json=(o,s=200)=>new Response(JSON.stringify(o),{status:s,headers:{'content-type':'application/json; charset=utf-8'}});
 const SYS='Du hjälper en svensk önskelista för familjer. Svara alltid med bara ett JSON-objekt, utan förklaring och utan kodstaket. Hitta aldrig på ett pris: price är null om ingen prislapp syns tydligt.';
-export default async (req)=>{
+const SUPA='https://abkjjgegtryxwtuyuife.supabase.co',PUB='sb_publishable_rIG3-FqfPFYaqXl57yEB1A_qtKWGJYp';
+// Kostnadsskydd: anropet måste komma från en giltig lista, och kvoten per lista och IP räknas i databasen.
+async function allow(token,ip){if(!token||String(token).length>80)return 'bad_token';
+ try{const r=await fetch(SUPA+'/rest/v1/rpc/paxa_ai_allow',{method:'POST',headers:{apikey:PUB,Authorization:'Bearer '+PUB,'content-type':'application/json'},body:JSON.stringify({p_token:String(token),p_ip:ip||''}),signal:AbortSignal.timeout(2500)});
+  if(!r.ok)return 'ok';return await r.json()}catch(e){console.error('see allow',e&&e.message);return 'ok'}}
+export default async (req,context)=>{
  if(req.method!=='POST')return json({error:'method'},405);
  const key=Netlify.env.get('ANTHROPIC_API_KEY');if(!key)return json({error:'no_key'},503);
  let body;try{body=await req.json()}catch(e){return json({error:'bad_json'},400)}
+ const verdict=await allow(body.token,context&&context.ip);
+ if(verdict==='bad_token')return json({error:'bad_token'},403);
+ if(verdict!=='ok')return json({error:'limit',detail:verdict},429);
  const model=Netlify.env.get('PAXA_MODEL')||'claude-haiku-5-5';
  const content=[];
  if(body.image){if(String(body.image).length>6e6)return json({error:'too_big'},413);
