@@ -63,6 +63,19 @@ a{color:inherit}
 .mono{font-family:'Space Mono',monospace}
 .press{transition:transform var(--t-spring) var(--spring),box-shadow var(--t-fx),background var(--t-fx),filter var(--t-fx)}
 .press:active{transform:scale(.94);transition-duration:var(--t-fast);transition-timing-function:ease-out}
+.tag.used{background:#DCEBDF;color:#1D4A2C}
+.dark .tag.used{background:#22382A;color:#BFE3C8}
+.used{margin-top:12px;padding:12px 14px;border-radius:16px;background:var(--bg2)}
+.usedl{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.usedl a{flex:1;min-width:84px;text-align:center;padding:10px 8px;border-radius:999px;background:var(--card);color:var(--ink);font:700 13px 'Archivo';text-decoration:none;box-shadow:0 1px 0 rgba(30,22,19,.08)}
+.famtabs{margin:2px 16px 12px;padding:10px 12px;border-radius:20px;background:var(--bg2)}
+.famtabs .lbl{display:block;margin:0 4px 8px}
+.famtabs div{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.famtabs a{flex:none;min-height:44px;display:flex;align-items:center;padding:0 16px;border-radius:999px;font:700 15px 'Archivo';color:var(--ink);text-decoration:none;background:var(--card);transition:background var(--t-fx),color var(--t-fx)}
+.famtabs a.on{background:var(--ink);color:var(--bg)}
+.famsel{display:flex;flex-direction:column;gap:6px;margin:6px 0 10px}
+.famrow{display:flex;align-items:center;gap:12px;min-height:52px;padding:0 14px;border-radius:16px;background:var(--card);font:600 16px 'Archivo'}
+.famrow input{width:22px;height:22px;accent-color:var(--pax)}
 .btn{min-height:56px;padding:0 20px;font-family:Anton;font-size:21px;letter-spacing:.02em;text-transform:uppercase;display:flex;align-items:center;justify-content:center;gap:10px;width:100%;border-radius:999px;position:relative;overflow:hidden}
 .btn.act{background:var(--act);color:var(--on-act);box-shadow:0 10px 24px -8px color-mix(in srgb,var(--act) 70%,transparent)}
 .btn.pax{background:var(--pax);color:var(--on-pax);box-shadow:0 10px 24px -8px color-mix(in srgb,var(--pax) 70%,transparent)}
@@ -468,13 +481,22 @@ async function load(silent){if(!token)return;try{const d=await rpc('get_list',{p
  catch(e){if(!silent)toast('Kunde inte nå servern');S.loaded=true;S.err=S.list?null:'net';render()}}
 function startSync(){stopSync();if(!token||!S.list)return;
  pollT=setInterval(()=>{if(document.visibilityState==='visible')load(true)},chan?45000:20000);
- if(sb){try{chan=sb.channel('paxa-'+S.list.id);chan.on('broadcast',{event:'change'},()=>load(true)).subscribe()}catch(e){chan=null}}}
+ chanName().then(n=>{if(!n||!sb||chan||!S.list)return;try{chan=sb.channel(n);chan.on('broadcast',{event:'change'},()=>load(true)).subscribe()}catch(e){chan=null}})}
+/* Kanalen döps efter en hash av gästlänken. Mottagaren har inte gästlänken och kan därför inte lyssna. */
+async function chanName(){const g=S.role==='owner'?S.tokens&&S.tokens.guest:S.role==='guest'?token:null;if(!g||!crypto.subtle)return null;
+ const h=await crypto.subtle.digest('SHA-256',new TextEncoder().encode('paxa-chan:'+g));return 'paxa-'+Array.from(new Uint8Array(h).slice(0,12),b=>b.toString(16).padStart(2,'0')).join('')}
 function stopSync(){clearInterval(pollT);pollT=null;if(chan){try{sb.removeChannel(chan)}catch(e){}chan=null}}
 function ping(){if(chan){try{chan.send({type:'broadcast',event:'change',payload:{}})}catch(e){}}}
 document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&token)load(true)});
 (function loadSb(){const s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js';s.onload=()=>{try{sb=window.supabase.createClient(SUPA,KEY,{realtime:{params:{eventsPerSecond:2}}});if(S.list)startSync()}catch(e){}};document.head.appendChild(s)})();
 
 /* ===================== routing ===================== */
+/* Samlingslänk (#fam-<token>): flera listor som flikar, t.ex. Familjens jul */
+let fam=ls.get('pl-fam',null);
+async function openFam(ft){try{const d=await rpc('get_fam',{p_token:ft});if(!d||!d.lists||!d.lists.length){toast('Samlingslänken hittades inte');location.replace('#');return}
+  fam={t:ft,name:d.name,lists:d.lists};ls.set('pl-fam',fam);location.replace('#list-'+d.lists[0].guest)}catch(e){toast('Kunde inte nå servern')}}
+function famHere(){if(!fam||!S.list)return null;const g=S.role==='owner'?S.tokens&&S.tokens.guest:token;return fam.lists.some(l=>l.guest===g)?g:null}
+function famBar(){const g=famHere();if(!g)return '';return `<nav class="famtabs" aria-label="${esc(fam.name)}"><span class="lbl">${esc(fam.name)}</span><div>${fam.lists.map(l=>`<a href="#list-${l.guest}" class="${l.guest===g?'on':''}" ${l.guest===g?'aria-current="page"':''}>${esc(l.recipient||l.name)}</a>`).join('')}</div></nav>`}
 function parseHash(){const h=location.hash.match(/^#list-([A-Za-z0-9]+)/);if(!h)return null;const o=mine().find(l=>l.role==='owner'&&l.gt===h[1]);return o?o.token:h[1]}
 /* Ägarlänken visas aldrig i adressfältet. Där står gästlänken, så det som kopieras därifrån är rätt länk att dela. */
 function saveKey(ot){const url=location.origin+location.pathname+'#list-'+ot;
@@ -490,7 +512,7 @@ let pendingShare=null;
 document.addEventListener('error',e=>{const t=e.target;if(!t||t.tagName!=='IMG'||t.id==='vfImg'||t.dataset.fb)return;
  if(t.dataset.alt){const a=t.dataset.alt;t.dataset.alt='';t.src=a;return}
  t.dataset.fb=1;const d=document.createElement('div');d.className='ph'+(t.className?' '+t.className:'');if(t.id)d.id=t.id;d.innerHTML=PHOTO;d.style.cssText='display:flex;align-items:center;justify-content:center;color:var(--ink3)';t.replaceWith(d)},true);
-async function route(){const t=parseHash();
+async function route(){const fm=location.hash.match(/^#fam-([A-Za-z0-9]+)/);if(fm){await openFam(fm[1]);return}const t=parseHash();
  if(t&&t!==token){token=t;S.loaded=false;S.list=null;S.err=null;deckIdx=0;stopSync();render();await load();startSync()}
  else if(!t){const last=mine()[0];if(last){location.replace('#list-'+(last.role==='owner'&&last.gt||last.token));return}token=null;S.list=null;S.loaded=true;stopSync();render()}
  const q=new URLSearchParams(location.search);if(q.get('url')||q.get('text')||q.get('title')){const v=q.get('url')||q.get('text')||q.get('title');history.replaceState(null,'',location.pathname+location.hash);if(S.list&&S.loaded)openAdd(v);else pendingShare=v}}
@@ -517,7 +539,7 @@ function renderLista(){
  const items=S.items.filter(i=>!hidden.has(i.id));const tot=items.length,done=items.filter(i=>paxOf(i.id)).length;const dl=daysLeft(L.date);const [a,b]=splitName(L.name);
  const all=listItems();const ex=!items.length;
  const list=all.filter(i=>filter==='alla'||(filter==='lediga'?!paxOf(i.id):!!paxOf(i.id)));
- w.innerHTML=`${S.role==='recipient'?'<div class="note-pill">Din lista. Släkten ser vad som är paxat, inte du.</div>':''}
+ w.innerHTML=`${famBar()}${S.role==='recipient'?'<div class="note-pill">Din lista. Släkten ser vad som är paxat, inte du.</div>':''}
  <div class="hero" id="hero"><div class="row"><span>${esc(L.occasion||'Önskelista')}</span><span>${L.date?fmtDate(L.date):''}</span></div>
  <h2>${esc(a)}<br><span>${esc(b)}</span></h2><div class="m">${L.kid?esc(L.recipient||'Mottagaren')+' ser inte vem som har paxat.':'Alla ser vad som är paxat.'}</div>
  ${dl!=null?`<div class="sticker"><div><b>${dl<0?0:dl}</b>${dl===1?'dag':'dagar'}<br>kvar</div></div>`:''}
@@ -545,7 +567,7 @@ function wireGrid(animate){const g=$('grid');if(!g)return;if(io)io.disconnect();
 function card(it,span){const p=paxOf(it.id);const me_=p&&p.by===me.id,tk=p&&!me_,wide=span>=7;
  return `<article class="card ${me_?'mine':''} ${tk?'taken':''} ${it.thumb?'':'noimg'} ${wide?'':'narrow'}" style="grid-column:span ${span}" data-u="${it.id}">
  <button class="open" aria-label="Visa ${esc(it.name)}">${it.thumb?`<img src="${esc(it.thumb)}" alt="" loading="lazy">`:PHOTO}</button>
- <div class="tags">${it.ex?'<span class="tag ex">Exempel</span>':''}${it.prio?'<span class="tag prio">★ Viktig</span>':''}${it.was&&it.price&&+it.was>+it.price?`<span class="tag drop">−${Math.round(it.was-it.price)} kr</span>`:''}${it.price==null?'<span class="tag q">Pris?</span>':''}</div>
+ <div class="tags">${it.ex?'<span class="tag ex">Exempel</span>':''}${it.prio?'<span class="tag prio">★ Viktig</span>':''}${it.used?'<span class="tag used">♻ Begagnat ok</span>':''}${it.was&&it.price&&+it.was>+it.price?`<span class="tag drop">−${Math.round(it.was-it.price)} kr</span>`:''}${it.price==null?'<span class="tag q">Pris?</span>':''}</div>
  <span class="stamp">${me_?'Din':'Paxad'}</span>
  <div class="lab"><div class="name"><b>${esc(it.name)}</b><span>${it.ex?'Exempel':kr(it.price)}${wide&&it.shop?' · '+esc(it.shop):''}</span></div>
  ${it.ex||!canPax()?'':`<button class="paxb press" aria-label="${me_?'Ångra paxning av':'Paxa'} ${esc(it.name)}">${me_?CHECK:GIFT}</button>`}</div></article>`}
@@ -582,10 +604,11 @@ let fromImg=null;
 function detail(u,img){const it=findItem(u);if(!it)return;const p=paxOf(u);const me_=p&&p.by===me.id,tk=p&&!me_;const own=it.by===me.id||isOwner();
  const stepN=['Paxad','Köpt','Inslagen'];const st=me_?(p.st||0):0;const hidePax=!canPax();
  openSheet(`<div class="det">${it.img||it.thumb?`<img class="hero-img" id="heroImg" src="${esc(it.img||it.thumb)}" data-alt="${it.img&&it.thumb?esc(it.thumb):''}" alt="${esc(it.name)}">`:`<div class="hero-img" id="heroImg" style="display:flex;align-items:center;justify-content:center;color:var(--ink3)">${PHOTO}</div>`}
- <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">${it.ex?'<span class="tag ex">Exempel</span>':''}${it.prio?'<span class="tag prio">★ Viktig</span>':''}${it.was&&it.price&&+it.was>+it.price?`<span class="tag drop">Sänkt ${Math.round(it.was-it.price)} kr</span>`:''}${it.price==null?'<span class="tag q">Pris?</span>':''}${tk&&!hidePax?'<span class="tag paxt">Paxad</span>':''}${it.cat?`<span class="tag">${esc(it.cat)}</span>`:''}</div>
+ <div style="display:flex;gap:6px;margin-top:14px;flex-wrap:wrap">${it.ex?'<span class="tag ex">Exempel</span>':''}${it.prio?'<span class="tag prio">★ Viktig</span>':''}${it.used?'<span class="tag used">♻ Gärna begagnat</span>':''}${it.was&&it.price&&+it.was>+it.price?`<span class="tag drop">Sänkt ${Math.round(it.was-it.price)} kr</span>`:''}${it.price==null?'<span class="tag q">Pris?</span>':''}${tk&&!hidePax?'<span class="tag paxt">Paxad</span>':''}${it.cat?`<span class="tag">${esc(it.cat)}</span>`:''}</div>
  <h5>${esc(it.name)}</h5>
  ${it.note?`<div class="note"><span class="lbl">Anteckning</span><br>${esc(it.note)}</div>`:''}
  <div class="shops"><div class="shop"><span>${esc(it.shop||'Butik ej angiven')}</span><span style="display:flex;gap:8px;align-items:center"><b>${kr(it.price)}</b>${it.url?`<a href="${esc(it.url)}" target="_blank" rel="noopener">Gå till</a>`:''}</span></div></div>
+ ${it.used&&!it.ex?usedLinks(it.name):''}
  ${it.ex?'<p class="hint" style="margin:12px 0 0">Ett exempel. Lägg till egna saker så försvinner det.</p>':
   hidePax?'':
   me_?`<span class="lbl">Hur långt har du kommit?</span><div class="steps" id="steps" style="--p:${st/2}">${stepN.map((s,i)=>`<button class="${i<=st?'f':''}" data-i="${i}"><i>${CHECK}</i>${s}</button>`).join('')}</div><button class="btn ghost press" id="dUn">Ångra paxning</button>`:
@@ -618,16 +641,19 @@ function moveSheet(it){const others=mine().filter(l=>l.role==='owner'&&l.id!==S.
  $('sheetIn').querySelectorAll('.mv').forEach(b=>b.onclick=async()=>{const to=others.find(l=>l.token===b.dataset.t);closeSheet();buzz();hidden.add(it.id);renderAll();
   try{await rpc('move_item',{p_token:token,p_item:it.id,p_to_token:to.token});ping();toast('Flyttad till '+to.name,async()=>{try{await rpc('move_item',{p_token:to.token,p_item:it.id,p_to_token:token})}catch(e){}hidden.delete(it.id);load(true)})}catch(e){toast(errTx(e))}hidden.delete(it.id);load(true)})}
 function editSheet(it){openSheet(`<span class="lbl">Ändra</span><h5>${esc(it.name)}</h5>${formHtml(it)}<button class="btn act press" id="fSave"><span>Spara</span></button>`);
- $('fSave').onclick=async()=>{const v=readForm();if(!v)return;closeSheet();Object.assign(it,v);renderAll();try{await rpc('update_item',{p_token:token,p_guest:me.id,p_item:it.id,p_name:v.name,p_price:v.price,p_shop:v.shop,p_url:v.url,p_note:v.note,p_cat:v.cat,p_prio:v.prio});ping();toast('Sparat');load(true)}catch(e){toast(errTx(e));load(true)}}}
+ $('fSave').onclick=async()=>{const v=readForm();if(!v)return;closeSheet();Object.assign(it,v);renderAll();try{await rpc('update_item',{p_token:token,p_guest:me.id,p_item:it.id,p_name:v.name,p_price:v.price,p_shop:v.shop,p_url:v.url,p_note:v.note,p_cat:v.cat,p_prio:v.prio,p_used:!!v.used});ping();toast('Sparat');load(true)}catch(e){toast(errTx(e));load(true)}}}
 function formHtml(v={}){return `<label class="field"><span>Namn</span><input id="fName" value="${esc(v.name||'')}" placeholder="Vad är det?"></label>
  <div class="row2"><label class="field"><span>Pris (kr)</span><input id="fPrice" inputmode="decimal" value="${v.price??''}" placeholder="Tomt om du inte vet"></label><label class="field"><span>Butik</span><input id="fShop" value="${esc(v.shop||'')}" placeholder="Valfritt"></label></div>
  <label class="field"><span>Länk</span><input id="fUrl" inputmode="url" value="${esc(v.url||'')}" placeholder="https://"></label>
  <label class="field"><span>Anteckning till givaren</span><input id="fNote" value="${esc(v.note||'')}" placeholder="Storlek, färg eller modell"></label>
  <label class="field"><span>Kategori</span><select id="fCat">${CATS.map(c=>`<option ${c===(v.cat||'Annat')?'selected':''}>${c}</option>`).join('')}</select></label>
- <div class="prow"><button class="chipb ${v.prio?'on':''}" id="fPrio" type="button">${v.prio?'★':'☆'} Viktig</button></div>`}
-function wireForm(){const p=$('fPrio');if(p)p.onclick=()=>{p.classList.toggle('on');p.textContent=(p.classList.contains('on')?'★':'☆')+' Viktig';buzz()}}
+ <div class="prow"><button class="chipb ${v.prio?'on':''}" id="fPrio" type="button">${v.prio?'★':'☆'} Viktig</button><button class="chipb ${v.used?'on':''}" id="fUsed" type="button">♻ Gärna begagnat</button></div>`}
+function wireForm(){const p=$('fPrio');if(p)p.onclick=()=>{p.classList.toggle('on');p.textContent=(p.classList.contains('on')?'★':'☆')+' Viktig';buzz()};const u=$('fUsed');if(u)u.onclick=()=>{u.classList.toggle('on');buzz()}}
 function readForm(){const name=$('fName').value.trim();if(!name){$('fName').closest('.field').classList.add('err');$('fName').focus();return null}
- const pr=$('fPrice').value.replace(/[^\d.,]/g,'').replace(',','.');return{name,price:pr?parseFloat(pr):null,shop:$('fShop').value.trim()||null,url:normUrl($('fUrl').value.trim()),note:$('fNote').value.trim()||null,cat:$('fCat').value,prio:$('fPrio').classList.contains('on')}}
+ const pr=$('fPrice').value.replace(/[^\d.,]/g,'').replace(',','.');return{name,price:pr?parseFloat(pr):null,shop:$('fShop').value.trim()||null,url:normUrl($('fUrl').value.trim()),note:$('fNote').value.trim()||null,cat:$('fCat').value,prio:$('fPrio').classList.contains('on'),used:$('fUsed').classList.contains('on')}}
+/* Gärna begagnat: färdiga sökningar, utan affiliatelänkar */
+function usedLinks(n){const q=encodeURIComponent(n);const L=[['Tradera','https://www.tradera.com/search?q='+q],['Blocket','https://www.blocket.se/recommerce/forsale/search?q='+q],['Vinted','https://www.vinted.se/catalog?search_text='+q]];
+ return `<div class="used"><span class="lbl">♻ Gärna begagnat. Sök efter den:</span><div class="usedl">${L.map(([t,u])=>`<a href="${u}" target="_blank" rel="noopener noreferrer">${t}</a>`).join('')}</div></div>`}
 function normUrl(u){if(!u)return null;if(!/^https?:\/\//i.test(u))u='https://'+u;try{new URL(u);return u}catch(e){return null}}
 
 /* ===================== lägg till ===================== */
@@ -656,10 +682,10 @@ async function quick(s){if(!s)return;const out=$('qOut');const u=parseUrl(s);let
  <div class="row2"><label class="field"><span>Pris (kr)</span><input id="qPrice" inputmode="decimal" value="${v.price??''}" placeholder="Tomt om du inte vet"></label><label class="field"><span>Anteckning</span><input id="qNote" placeholder="Storlek, färg"></label></div>
  <button class="btn pax press" id="qAdd">${GIFT}<span>Lägg till</span></button>`;
  $('qAdd').onclick=()=>{const pr=$('qPrice').value.replace(/[^\d.,]/g,'').replace(',','.');const name=$('qName').value.trim();if(!name){$('qName').focus();return}const item={...v,name,price:pr?parseFloat(pr):null,note:$('qNote').value.trim()||null,prio:false};withName(()=>addItem(item,v.thumb))}}
-async function addItem(v,thumb,imgUrl){closeSheet();buzz(14);const tmp={id:'tmp'+Date.now(),name:v.name,price:v.price??null,shop:v.shop||null,url:v.url||null,note:v.note||null,cat:v.cat||'Annat',prio:!!v.prio,thumb:thumb||null,img:imgUrl||null,by:me.id,by_name:me.name,at:Date.now()};
+async function addItem(v,thumb,imgUrl){closeSheet();buzz(14);const tmp={id:'tmp'+Date.now(),name:v.name,price:v.price??null,shop:v.shop||null,url:v.url||null,note:v.note||null,cat:v.cat||'Annat',prio:!!v.prio,used:!!v.used,thumb:thumb||null,img:imgUrl||null,by:me.id,by_name:me.name,at:Date.now()};
  S.items.unshift(tmp);renderAll();if(cur!=='lista')show('lista');$('v-lista').scrollTo({top:0,behavior:RM?'auto':'smooth'});
  setTimeout(()=>{const c=document.querySelector(`.card[data-u="${tmp.id}"]`);if(c)burst(c)},500);
- try{const r=await rpc('add_item',{p_token:token,p_guest:me.id,p_guest_name:me.name,p_name:tmp.name,p_price:tmp.price,p_shop:tmp.shop,p_url:tmp.url,p_note:tmp.note,p_cat:tmp.cat,p_prio:tmp.prio,p_thumb:tmp.thumb,p_img:tmp.img});
+ try{const r=await rpc('add_item',{p_token:token,p_guest:me.id,p_guest_name:me.name,p_name:tmp.name,p_price:tmp.price,p_shop:tmp.shop,p_url:tmp.url,p_note:tmp.note,p_cat:tmp.cat,p_prio:tmp.prio,p_thumb:tmp.thumb,p_img:tmp.img,p_used:tmp.used});
   tmp.id=r.id;ping();toast('Tillagd: '+tmp.name,()=>softDelete(tmp));load(true)}
  catch(e){S.items=S.items.filter(i=>i!==tmp);renderAll();toast(errTx(e))}}
 
@@ -722,16 +748,16 @@ async function result(g){
  <div id="resForm" ${names.length?'hidden':''}><label class="field"><span>Namn</span><input id="rName" value="${esc(pick)}" placeholder="Vad är det?"></label></div>
  <div class="row2"><label class="field"><span>Pris (kr)</span><input id="rPrice" inputmode="decimal" value="${g&&g.price!=null?+g.price:''}" placeholder="Tomt om du inte vet"></label><label class="field"><span>Butik</span><input id="rShop" value="${esc(g&&g.shop||'')}" placeholder="Valfritt"></label></div>
  <button class="more" id="rMore">Anteckning och viktig ${CHEV}</button>
- <div class="fold" id="rFold"><div><label class="field"><span>Anteckning till givaren</span><input id="rNote" placeholder="Storlek, färg eller modell"></label><div class="prow"><button class="chipb" id="rPrio">☆ Viktig</button></div></div></div>
+ <div class="fold" id="rFold"><div><label class="field"><span>Anteckning till givaren</span><input id="rNote" placeholder="Storlek, färg eller modell"></label><div class="prow"><button class="chipb" id="rPrio">☆ Viktig</button><button class="chipb" id="rUsed">♻ Gärna begagnat</button></div></div></div>
  <button class="btn act press" id="rAdd">${GIFT}<span>Lägg i listan</span></button>`);
  let prio=false;
  if($('guess'))$('guess').onclick=e=>{const b=e.target.closest('button');if(!b)return;buzz();[...$('guess').children].forEach(x=>x.classList.toggle('on',x===b));
   if(b.textContent.startsWith('Annat')){$('resForm').hidden=false;$('rName').value='';$('rName').focus()}else{pick=b.textContent;$('resForm').hidden=true}};
  $('rMore').onclick=()=>{$('rMore').classList.toggle('open');$('rFold').classList.toggle('open')};
- $('rPrio').onclick=()=>{prio=!prio;buzz();$('rPrio').textContent=(prio?'★':'☆')+' Viktig';$('rPrio').classList.toggle('on',prio)};
+ $('rPrio').onclick=()=>{prio=!prio;buzz();$('rPrio').textContent=(prio?'★':'☆')+' Viktig';$('rPrio').classList.toggle('on',prio)};$('rUsed').onclick=()=>{$('rUsed').classList.toggle('on');buzz()};
  $('rAdd').onclick=()=>{const name=($('resForm').hidden?pick:$('rName').value.trim());if(!name){$('resForm').hidden=false;$('rName').focus();return}
   const pr=$('rPrice').value.replace(/[^\d.,]/g,'').replace(',','.');
-  const item={name,price:pr?parseFloat(pr):null,shop:$('rShop').value.trim()||null,note:$('rNote').value.trim()||null,cat:g&&CATS.includes(g.cat)?g.cat:'Annat',prio};withName(()=>addItem(item,thumb,null))}}
+  const item={name,price:pr?parseFloat(pr):null,shop:$('rShop').value.trim()||null,note:$('rNote').value.trim()||null,cat:g&&CATS.includes(g.cat)?g.cat:'Annat',prio,used:$('rUsed').classList.contains('on')};withName(()=>addItem(item,thumb,null))}}
 
 /* ===================== listor ===================== */
 function nextDec24(){const d=new Date();let y=d.getFullYear();if(d>new Date(y,11,24))y++;return y+'-12-24'}
@@ -764,6 +790,9 @@ function renderMer(){const L=S.list;const w=$('merIn');const base=location.origi
   <div class="linkrow"><div class="t"><b>Din egen länk</b><small>Spara den. Det är din nyckel till listan.</small></div><button data-share="owner">Kopiera</button></div>
   <p class="fine">Ingen behöver konto. Den som har en länk kan göra det länken tillåter, så skicka släktlänken bara till släkten.</p></div>`:''}
  ${L&&!isOwner()?`<div class="grp"><h4>Den här listan</h4><p class="fine" style="padding-top:12px">Du är ${S.role==='guest'?'gäst':'mottagare'} på ${esc(L.name)}. ${S.role==='guest'?'Du kan paxa och lägga till saker.':'Du kan önska dig saker. Vad som är paxat ser du inte.'}</p><div class="linkrow"><div class="t"><b>Dela vidare</b><small>Samma länk som du fick</small></div><button data-share="self">Dela</button></div></div>`:''}
+ ${mine().filter(l=>l.role==='owner').length>1?`<div class="grp"><h4>Familjelänk</h4>
+  <div class="linkrow"><div class="t"><b>En länk till flera listor</b><small>Släkten får alla barnens listor som flikar i en och samma länk</small></div><button id="famNew">Skapa</button></div>
+  ${fam&&fam.mine?`<div class="linkrow"><div class="t"><b>${esc(fam.name)}</b><small>${fam.lists.map(l=>esc(l.recipient||l.name)).join(' · ')}</small></div><button id="famShare">Dela</button></div>`:''}</div>`:''}
  <div class="grp"><h4>Mina listor</h4>${mine().map(l=>`<a class="it ${L&&l.id===L.id?'cur':''}" href="#list-${l.token}"><span class="dot" style="background:${l.role==='owner'?'var(--pax)':l.role==='guest'?'var(--pris)':'var(--bg3)'}"></span>${esc(l.name)}<span class="r">${l.role==='owner'?'Din':l.role==='guest'?'Gäst':'Mottagare'}</span></a>`).join('')}<button class="it" id="newList"><b style="font-family:Anton;font-size:22px;font-weight:400;width:12px">+</b>Ny lista</button></div>
  <div class="grp"><h4>Visning</h4>
   <button class="it" role="switch" aria-checked="${document.documentElement.classList.contains('big')}" data-t="big">Större text<span class="sw2"></span></button>
@@ -778,11 +807,25 @@ function renderMer(){const L=S.list;const w=$('merIn');const base=location.origi
  w.querySelectorAll('.it[role=switch][data-t]').forEach(b=>b.onclick=()=>{const on=b.getAttribute('aria-checked')!=='true';b.setAttribute('aria-checked',on);buzz();const t=b.dataset.t;
   if(t==='big'){document.documentElement.classList.toggle('big',on);ls.set('pl-big',on)}if(t==='dark'){document.documentElement.classList.toggle('dark',on);ls.set('pl-dark',on)}if(t==='kid'){kid=on;renderAll()}});
  const nb=$('newList');if(nb)nb.onclick=()=>newListSheet();
+ if($('famNew'))$('famNew').onclick=famSheet;if($('famShare'))$('famShare').onclick=()=>shareFam(fam);
  if($('nameBtn'))$('nameBtn').onclick=()=>askName(()=>{renderMer();toast('Sparat')});
  if($('editList'))$('editList').onclick=()=>newListSheet(L);
  if($('delList'))$('delList').onclick=()=>{openSheet(`<span class="lbl">Radera</span><h5>Ta bort ${esc(L.name)}?</h5><p>Listan och alla saker i den försvinner för alla. Det går inte att ångra.</p><div style="height:14px"></div><button class="btn act press" id="rdYes"><span>Ja, radera</span></button><div style="height:10px"></div><button class="btn ghost press" id="rdNo">Avbryt</button>`);
   $('rdNo').onclick=closeSheet;$('rdYes').onclick=async()=>{closeSheet();try{await rpc('delete_list',{p_token:token});forget(L.id);stopSync();token=null;S.list=null;location.hash='';route();toast('Listan är borttagen')}catch(e){toast(errTx(e))}}};
  if($('leaveList'))$('leaveList').onclick=()=>{forget(L.id);stopSync();token=null;S.list=null;location.hash='';route()}}
+function famSheet(){const own=mine().filter(l=>l.role==='owner');
+ openSheet(`<span class="lbl">Familjelänk</span><h5>Vilka listor ska med?</h5>
+ <label class="field"><input id="famName" value="Familjens jul" placeholder="Namn på länken" aria-label="Namn på länken"></label>
+ <div class="famsel">${own.map((l,i)=>`<label class="famrow"><input type="checkbox" value="${esc(l.token)}" checked><span>${esc(l.name)}</span></label>`).join('')}</div>
+ <p class="fine">Länken visar listorna som flikar. Den ger samma rätt som släktlänken: se, paxa och lägga till. Skicka den inte till barnen, för då ser de vad som är paxat.</p>
+ <button class="btn act press" id="famGo"><span>Skapa länken</span></button>`);
+ $('famGo').onclick=async()=>{const toks=[...document.querySelectorAll('.famsel input:checked')].map(x=>x.value);if(toks.length<2){toast('Välj minst två listor');return}
+  $('famGo').disabled=true;try{const r=await rpc('create_fam',{p_name:$('famName').value.trim(),p_owner_tokens:toks});const d=await rpc('get_fam',{p_token:r.token});
+   fam={t:r.token,name:d.name,lists:d.lists,mine:true};ls.set('pl-fam',fam);closeSheet();buzz(20);renderMer();renderAll();setTimeout(()=>shareFam(fam),350)}catch(e){$('famGo').disabled=false;toast(errTx(e))}}}
+async function shareFam(f){const url=location.origin+location.pathname+'#fam-'+f.t;
+ const text=`Hej! Här är ${f.name}: ${f.lists.map(l=>l.recipient||l.name).join(', ')}. Öppna länken, välj något och tryck Paxa, så vet alla att det är taget. Inget konto behövs.\n${url}`;
+ buzz(16);if(navigator.share){try{await navigator.share({text});return}catch(e){if(e&&e.name==='AbortError')return}}
+ try{await navigator.clipboard.writeText(text);toast('Kopierat. Klistra in i släktchatten.')}catch(e){prompt('Kopiera:',url)}}
 async function share(kind,base){const L=S.list;let url,text;
  if(kind==='owner'){url=base+'#list-'+S.tokens.owner;try{await navigator.clipboard.writeText(url);toast('Din länk är kopierad. Spara den på ett säkert ställe.')}catch(e){toast('Kunde inte kopiera')}return}
  if(kind==='guest'){url=base+'#list-'+S.tokens.guest;text=`Hej! Här är ${L.name}. Öppna länken, välj något och tryck Paxa, så vet alla att det är taget. ${L.kid?(L.recipient||'Mottagaren')+' ser inte vem som paxat. ':''}Inget konto behövs.\n${url}`}
